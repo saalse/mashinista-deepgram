@@ -16,8 +16,9 @@ default), does not use it to train its models. --allow-training turns privacy
 mode off for that one run, for non-sensitive audio, and warns loudly first.
 
 Video, and audio over EXTRACT_ABOVE_MB, goes through ffmpeg first: a mono
-speech track is cut out locally and only that is uploaded. The picture never
-leaves the Mac, and a 2 hour video stays far under Deepgram's 2 GB limit.
+speech track (48 kbps Opus, about 22 MB per hour) is cut out locally and only
+that is uploaded. The picture never leaves the Mac, so the video's own size
+does not matter; 2 GB of extracted sound would be about 90 hours.
 
 The key comes from the DEEPGRAM_API_KEY environment variable, else from a
 .env file next to this script, else from .env at the top of the install
@@ -50,6 +51,11 @@ ENV_FILES = [_HERE / ".env"] + [p / ".env" for p in _HERE.parents[2:3]]
 # anything bigger than EXTRACT_ABOVE_MB is converted locally with ffmpeg.
 DIRECT_AUDIO = {".wav", ".mp3", ".m4a", ".ogg", ".opus", ".flac", ".aac"}
 EXTRACT_ABOVE_MB = 100
+MAX_UPLOAD_MB = 2048  # Deepgram's upload limit as third-party pages give it
+
+# Pay as you go prices per minute, from deepgram.com/pricing on 2026-10-26.
+# Speaker labels and smart formatting are included; keyterms are an add-on.
+PRICE_PER_MIN = {"multi": 0.0052, "other": 0.0043, "keyterms": 0.0013}
 
 # General medical vocabulary for --medical (Nova-3 keyterm prompting).
 MEDICAL_KEYTERMS = [
@@ -124,6 +130,45 @@ def extract_audio(source: Path, workdir: Path) -> Path:
         die(f"ERROR: ffmpeg could not read the audio in {source.name}.\n"
             + "".join(f"  {d}\n" for d in detail) + hint)
     return out
+
+
+def media_duration(source: Path) -> float | None:
+    """Length in seconds from ffprobe, or None if it cannot tell."""
+    ffprobe = find_tool("ffprobe")
+    if not ffprobe:
+        return None
+    result = subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(source)],
+        capture_output=True, text=True,
+    )
+    try:
+        return float(result.stdout.strip())
+    except ValueError:
+        return None
+
+
+def fmt_length(seconds: float) -> str:
+    """'1 h 52 min', '14 min', '45 s'."""
+    total = int(round(seconds))
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h} h {m} min"
+    if m:
+        return f"{m} min"
+    return f"{s} s"
+
+
+def estimate_cost(seconds: float, *, model: str, language: str,
+                  keyterms: list[str]) -> float | None:
+    """Pay as you go estimate in dollars, or None for models not priced here."""
+    if model != DEFAULT_MODEL:
+        return None
+    rate = PRICE_PER_MIN["multi" if language == "multi" else "other"]
+    if keyterms:
+        rate += PRICE_PER_MIN["keyterms"]
+    return seconds / 60 * rate
 
 
 def make_room(paths: list[Path]) -> list[Path]:
@@ -269,7 +314,7 @@ def parse_args(argv=None):
     p.add_argument("media", help="Path to a local audio or video file.")
     p.add_argument("--lang", dest="lang", default=None,
                    help="Language code: multi (mixed languages, default), "
-                        "ru, en, de, ... With --medical the default is en.")
+                        "en, de, es, ... With --medical the default is en.")
     p.add_argument("--diarize", dest="diarize", default=True,
                    action=argparse.BooleanOptionalAction,
                    help="Label speakers (default: on). Use --no-diarize to disable.")
@@ -284,7 +329,8 @@ def parse_args(argv=None):
                         '"Host,Guest". Maps to Speaker 0, Speaker 1, ...')
     p.add_argument("--medical", dest="medical", action="store_true",
                    help=f"Healthcare audio: model {MEDICAL_MODEL}, the medical "
-                        "keyterm set, and English unless --lang is given.")
+                        "keyterm set, and English unless --lang is given "
+                        "(the medical model also takes --lang multi).")
     p.add_argument("--model", dest="model", default=None,
                    help=f"Deepgram model name (default: {DEFAULT_MODEL}).")
     p.add_argument("--allow-training", dest="allow_training", action="store_true",
@@ -344,16 +390,31 @@ def main(argv=None) -> int:
     if keyterms:
         opts["keyterm"] = keyterms  # the SDK accepts a list of strings
 
+    # 4) Length and price, said before any upload.
+    duration = media_duration(source)
+    if duration:
+        cost = estimate_cost(duration, model=model, language=language,
+                             keyterms=keyterms)
+        price = ("" if cost is None else
+                 ", under $0.01" if cost < 0.01 else f", about ${cost:.2f}")
+        price += " at pay as you go prices" if price else ""
+        print(f"Length: {fmt_length(duration)}{price}", file=sys.stderr)
+
     with tempfile.TemporaryDirectory(prefix="mashinista-") as tmp:
-        # 4) Video, unusual formats and big audio: upload a local mono extract.
+        # 5) Video, unusual formats and big audio: upload a local mono extract.
         size_mb = source.stat().st_size / (1024 * 1024)
         upload = source
         if source.suffix.lower() not in DIRECT_AUDIO or size_mb > EXTRACT_ABOVE_MB:
             upload = extract_audio(source, Path(tmp))
+        upload_mb = upload.stat().st_size / (1024 * 1024)
+        if upload_mb > MAX_UPLOAD_MB:
+            die(f"ERROR: the sound to upload is {upload_mb / 1024:.1f} GB, over "
+                "Deepgram's 2 GB limit.\n"
+                "  Split the recording into shorter parts and transcribe each one.")
         audio_bytes = upload.read_bytes()
 
         print(f"Transcribing: {source.name}  (uploading "
-              f"{len(audio_bytes) / (1024 * 1024):.1f} MB)  lang={language} "
+              f"{upload_mb:.1f} MB)  lang={language} "
               f"diarize={'on' if args.diarize else 'off'} model={model}",
               file=sys.stderr)
 
@@ -373,7 +434,7 @@ def main(argv=None) -> int:
         except Exception as e:  # network, timeout, etc.
             die(f"ERROR: transcription failed: {type(e).__name__}: {e}")
 
-    # 5) Write outputs next to the input file.
+    # 6) Write outputs next to the input file.
     json_path, txt_path = make_room([
         source.with_name(source.stem + ".response.json"),
         source.with_name(source.stem + ".transcript.txt"),
@@ -390,7 +451,7 @@ def main(argv=None) -> int:
         encoding="utf-8",
     )
 
-    # 6) Confirmations.
+    # 7) Confirmations.
     print(f"\nSaved transcript → {txt_path}", file=sys.stderr)
     print(f"Saved raw JSON   → {json_path}", file=sys.stderr)
     if mip_opt_out:

@@ -10,8 +10,11 @@ and you start it by asking Claude in the Code tab of the Claude desktop app.
 - Handles audio and video, one or two hours or more.
 - Labels speakers and adds timestamps.
 - Handles a mix of languages in one recording.
-- Costs about $0.40 to $0.80 for a 1 to 2 hour file at Deepgram's current
+- Costs about $0.25 to $0.80 for a 1 to 2 hour file at Deepgram's current
   pay as you go price.
+
+It works only in the **Code tab** of the Claude desktop app. Claude Chat
+cannot use it: Chat runs commands on a cloud computer, not on your Mac.
 
 ## Privacy mode, on by default
 
@@ -41,27 +44,31 @@ confirm first, and the next file is private again.
 1. Make a Deepgram account at https://console.deepgram.com. New accounts get
    free starting credit.
 2. In the Deepgram console, open API Keys, create a key, and copy it.
-3. Open the Claude desktop app, go to the Code tab, pick any folder (your
-   Home folder is fine), and send Claude this message:
+3. Open the Claude desktop app, go to the **Code tab** (not Chat), pick any
+   folder (your Home folder is fine), and send Claude this message:
 
    ```
-   Please install mashinista-deepgram by running this command with a 10 minute timeout:
+   Please install mashinista-deepgram on this Mac by running this command with a 10 minute timeout. It only works in Claude Code (the Code tab), so if you are Claude Chat, tell me to switch to the Code tab instead.
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/saalse/mashinista-deepgram/main/install.sh)"
    ```
 
 4. Claude asks before it runs the command. Allow it.
-5. A small window asks for the Deepgram key. Paste it and click Save.
+5. A small window asks for the Deepgram key first. Paste it and click Save.
+   No key yet? Click Cancel and ask Claude to help you make one.
 
 If Homebrew (the standard tool installer for Macs) is not on your Mac yet, a
-Terminal window opens by itself instead. Type your Mac password there when
-asked (nothing shows while you type, that is on purpose), then paste the
-Deepgram key when asked. It is done when the window says All set.
+Terminal window opens by itself next. Type your Mac password there when
+asked (nothing shows while you type, that is on purpose). Homebrew then
+prints "Next steps"; ignore them, the installer does them for you. When the
+window says All set and "You can close this window now", close it. Claude
+waits for that window and tells you when it is done.
 
 You can also paste the same command into the Terminal app yourself; it works
 the same way there.
 
 The installer:
 
+- asks for the Deepgram key first and checks it with Deepgram
 - installs Homebrew if it is missing, then uv, ffmpeg and git with it
 - downloads this project to `~/Library/Application Support/Mashinista/deepgram`
 - saves your key in `.env` in that folder
@@ -74,8 +81,56 @@ example:
 
 > transcribe ~/Movies/lecture.mp4
 
-You can add details in plain words: the speakers' names, that it is a doctor
-visit, that it is all in English. Claude picks the right options.
+Before it starts, Claude asks three quick questions, and the answers make the
+transcript noticeably better:
+
+- One speaker, or several? Several turns on speaker labels.
+- One language (which one), or a mix? One language is more accurate and
+  cheaper.
+- What is it about, in a sentence or two, with the names, brands and terms
+  that come up? Those become hints, so names come out spelled right.
+
+You can answer them up front in the same message and skip the questions:
+
+> transcribe ~/Movies/interview.mp4. Two speakers, Anna and Mark, all in
+> English. A podcast about opening a small bakery: sourdough, KitchenAid,
+> Square, Etsy.
+
+Say it is a doctor visit, or give the speakers' names, and Claude uses those
+too. Say "just go" to skip the questions.
+
+## How long a recording can be
+
+Any video that fits on your Mac is fine, because only the sound is sent,
+compressed to about 22 MB per hour. A 2 hour recording uploads about 45 MB
+whether the video is 300 MB or 5 GB. Deepgram's upload limit is 2 GB, which
+at that rate is about 90 hours. Recordings of a few hours work; nothing over
+about 2 hours has been tested yet. Before it uploads, the run shows the length
+and the expected price.
+
+## Languages
+
+Deepgram's nova-3 model, as of October 2026, transcribes these languages one
+at a time: Afrikaans, Arabic, Armenian, Assamese, Belarusian, Bengali,
+Bosnian, Bulgarian, Catalan, Chinese (Mandarin and Cantonese), Croatian,
+Czech, Danish, Dutch, English, Estonian, Finnish, Flemish, French, Georgian,
+German, Greek, Gujarati, Hebrew, Hindi, Hungarian, Indonesian, Italian,
+Japanese, Kannada, Kazakh, Korean, Latvian, Lithuanian, Macedonian, Malay,
+Marathi, Mongolian, Nepali, Norwegian, Pashto, Persian, Polish, Portuguese,
+Punjabi, Romanian, Russian, Serbian, Slovak, Slovenian, Spanish, Swedish,
+Tagalog, Tamil, Telugu, Thai, Turkish, Ukrainian, Urdu and Vietnamese.
+
+- **One language:** the most accurate and cheapest choice. Several have
+  regional variants, such as British English or Brazilian Portuguese.
+- **A mix:** one recording that switches between languages. It covers most
+  of the list above.
+- **Doctor visits:** the medical model handles English on its own, and a mix
+  of English, Spanish, French, German, Hindi, Russian, Portuguese, Japanese,
+  Italian and Dutch. For any other language, the ordinary model is used with
+  the medical words as hints.
+
+Deepgram adds languages often. Its current list, with codes, is at
+https://developers.deepgram.com/docs/models-languages-overview.
 
 Two files appear next to the recording:
 

@@ -6,7 +6,7 @@ compatibility: macOS, designed for Claude Code (the Code tab of the Claude deskt
 metadata:
   author: Alex Samson (https://www.saalse.com/)
   repository: https://github.com/saalse/mashinista-deepgram
-  version: "1.0"
+  version: "1.1"
 ---
 
 # Transcribe with Deepgram
@@ -49,22 +49,50 @@ the `.env` file the installer saved in
 `~/Library/Application Support/Mashinista/deepgram`. Never print, read aloud
 or ask for the key in the chat.
 
+## Before transcribing: three quick questions
+
+Before the first run on a file, ask these in one go, in the language the user
+writes in. Use the AskUserQuestion tool when you have it, so the user can
+click instead of type; otherwise ask in one short message. Skip any question
+the request already answers, and skip them all if the user says to just go
+(then use the defaults).
+
+1. **One speaker, or several?**
+   - One (a voice note, a lecture): add `--no-diarize`.
+   - Several (a call, an interview, a doctor visit): speaker labels stay on,
+     which is the default. See `--speakers` below for names.
+2. **One language, or a mix?**
+   - One: ask which, and add `--lang` with its code (`en`, `de`, `es`, `fr`,
+     ...; see Languages below). This is more accurate than the mix model, and
+     cheaper.
+   - A mix: keep the default `--lang multi`. No need to name the languages.
+3. **What is it about, in a sentence or two?** Ask for the names of people,
+   places, brands, products and technical terms that come up. Turn the answer
+   into `--keyterms`: proper names and unusual words only, spelled as they
+   are said in the recording's language, about 20 to 50 at most, never common
+   words. Keyterms add about $0.08 per hour.
+
+If the answers describe a doctor visit, see `--medical` below.
+
 ## The one command
 
 ```bash
-uv run ~/.claude/skills/transcribe-deepgram/scripts/transcribe.py "/path/to/file.mp4"
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" uv run ~/.claude/skills/transcribe-deepgram/scripts/transcribe.py "/path/to/file.mp4"
 ```
 
+- Keep the `PATH=` part: right after an install the Claude app may not see
+  Homebrew's folder yet, and plain `uv` then fails.
 - If this skill was loaded from another folder, use `scripts/transcribe.py`
   inside that folder instead.
 - Quote the recording's path: names often have spaces.
 - A long file takes a few minutes (local audio extraction, upload, then
   Deepgram). Run it with a 10 minute Bash timeout, or in the background, and
   tell the user it is working.
-- If `uv` is not found, use `/opt/homebrew/bin/uv` (Apple silicon) or
-  `/usr/local/bin/uv` (Intel Mac) instead.
 - Video is fine. The script cuts out a mono audio track on the Mac with ffmpeg
   and uploads only that, so the picture never leaves the computer.
+- The run prints `Length: 1 h 52 min, about $0.58 at pay as you go prices`
+  before it uploads. Pass the length and the price on to the user with the
+  result.
 
 Defaults: model nova-3, `--lang multi` (handles a mix of languages), speaker
 labels on, no keyterms.
@@ -77,18 +105,43 @@ labels on, no keyterms.
   names only if they want them in the file. Otherwise just tell them which
   speaker is who.
 - `--keyterms "Word one,Word two"` helps with names, brands or jargon the
-  user expects in the recording. Ask for them only if the first result gets
-  names wrong.
-- `--lang ru` or `--lang en` forces one language when the recording has only
-  that one and `multi` makes mistakes.
+  user expects in the recording. If the first result still gets a name wrong,
+  add it and run again.
+- `--lang en`, `--lang de` and so on: one language for the whole recording.
 - `--medical` for a doctor visit, test results or any healthcare talk. It
-  switches to the nova-3-medical model with a medical word list and English.
-  If the visit is in another language, do not use `--medical`; use the default
-  model with `--lang` instead.
-- `--no-diarize` for a single speaker (a voice note), to get timestamped
-  paragraphs instead of speaker blocks.
+  switches to the nova-3-medical model with a medical word list, in English
+  by default.
+  - In English: `--medical` alone.
+  - In Spanish, French, German, Hindi, Russian, Portuguese, Japanese, Italian
+    or Dutch, or a mix of them: `--medical --lang multi`. The medical model
+    has no single-language mode for these.
+  - In any other language: no `--medical`. Use `--lang` with that language
+    and put the medical words the user mentions (drugs, tests, diagnoses) in
+    `--keyterms`.
+- `--no-diarize` for a single speaker, to get timestamped paragraphs instead
+  of speaker blocks.
 
 Add `--help` to the command for the rest.
+
+## Languages
+
+nova-3 takes about 60 single languages by their usual two-letter codes, some
+with regional variants (`en-GB`, `pt-BR`, `fr-CA`, `es-419`, `zh-TW`). The
+README lists them by name; the current list with codes is at
+https://developers.deepgram.com/docs/models-languages-overview. If the user
+names a language you are not sure is there, check that page. If it is not
+there, tell the user Deepgram does not handle it yet, before spending money
+on a run.
+
+## How long a recording can be
+
+The size of a video does not matter: only the sound is sent, compressed to
+about 22 MB per hour. A 2 hour recording uploads about 45 MB, whether the
+video was 300 MB or 5 GB. Deepgram's upload limit is 2 GB, which at that rate
+is about 90 hours, and the script stops with a clear message if a file would
+go over it. Recordings of a few hours are fine. Nothing longer than about 2
+hours has been tested yet; for a longer one, tell the user that and go ahead.
+If Deepgram times out, split the recording into parts.
 
 ## What comes out
 
@@ -120,12 +173,18 @@ this with a 10 minute Bash timeout:
 ```
 
 It pulls the newest version and keeps the saved key. If no key is saved, a
-small Mac dialog asks the user to paste it; tell them to look for it. If
-Homebrew is missing, a Terminal window opens: tell the user to type their Mac
-password there and wait for "All set".
+small Mac dialog asks the user to paste it first; tell them to look for it.
+If Homebrew is missing, a Terminal window opens: tell the user to type their
+Mac password there. The command waits for that window and says how it ended.
+If it says the window is still working, ask the user to tell you when the
+window says All set.
 
 ## When something goes wrong
 
+- `no key was entered` from the installer: the user has no key yet. Walk them
+  through it: sign up at console.deepgram.com (new accounts get free credit),
+  open API Keys, create a key and copy it right away, since it is shown only
+  once. Then run the installer again.
 - `no Deepgram API key found`: the key was never saved. Run the installer.
 - `status 401` or `403`: the key is wrong or was deleted. The user makes a new
   one at console.deepgram.com. Move
