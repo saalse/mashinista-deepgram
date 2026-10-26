@@ -1,0 +1,30 @@
+# The Deepgram key
+.env
+.env.*
+
+# Outputs
+*.transcript.txt
+*.response.json
+
+# Audio and video
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.ogg
+*.opus
+*.flac
+*.wma
+*.amr
+*.mp4
+*.m4v
+*.mov
+*.mkv
+*.webm
+*.avi
+*.3gp
+
+# Python and macOS
+__pycache__/
+.venv/
+.DS_Store
