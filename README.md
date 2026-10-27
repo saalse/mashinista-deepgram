@@ -84,11 +84,16 @@ example:
 Before it starts, Claude asks three quick questions, and the answers make the
 transcript noticeably better:
 
-- One speaker, or several? Several turns on speaker labels.
-- One language (which one), or a mix? One language is more accurate and
-  cheaper.
-- What is it about, in a sentence or two, with the names, brands and terms
-  that come up? Those become hints, so names come out spelled right.
+- Who speaks: one person, several you can't name, or several whose names you
+  type in. Several turns on speaker labels.
+- Which language, or a mix? One language is more accurate and cheaper.
+- Then, in a message you type: what is it about, and which names come up?
+  People who are talked about, places, brands, products, technical terms,
+  professions. Those become hints, so rare names come out spelled right. This
+  one is worth the minute it takes.
+
+The first two are buttons. To type an answer instead, such as the speakers'
+names or another language, pick Other.
 
 You can answer them up front in the same message and skip the questions:
 
@@ -96,8 +101,8 @@ You can answer them up front in the same message and skip the questions:
 > English. A podcast about opening a small bakery: sourdough, KitchenAid,
 > Square, Etsy.
 
-Say it is a doctor visit, or give the speakers' names, and Claude uses those
-too. Say "just go" to skip the questions.
+If it sounds like a doctor visit, Claude switches to the medical model on its
+own and tells you. Say "just go" to skip the questions.
 
 ## How long a recording can be
 

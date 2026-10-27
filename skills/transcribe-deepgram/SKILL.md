@@ -6,7 +6,7 @@ compatibility: macOS, designed for Claude Code (the Code tab of the Claude deskt
 metadata:
   author: Alex Samson (https://www.saalse.com/)
   repository: https://github.com/saalse/mashinista-deepgram
-  version: "1.1"
+  version: "1.2"
 ---
 
 # Transcribe with Deepgram
@@ -51,28 +51,61 @@ or ask for the key in the chat.
 
 ## Before transcribing: three quick questions
 
-Before the first run on a file, ask these in one go, in the language the user
-writes in. Use the AskUserQuestion tool when you have it, so the user can
-click instead of type; otherwise ask in one short message. Skip any question
-the request already answers, and skip them all if the user says to just go
-(then use the defaults).
+Before the first run on a file, ask about it, in the language the user writes
+in. Skip any question the request already answers, and skip them all if the
+user says to just go (then use the defaults).
 
-1. **One speaker, or several?**
-   - One (a voice note, a lecture): add `--no-diarize`.
-   - Several (a call, an interview, a doctor visit): speaker labels stay on,
-     which is the default. See `--speakers` below for names.
-2. **One language, or a mix?**
-   - One: ask which, and add `--lang` with its code (`en`, `de`, `es`, `fr`,
-     ...; see Languages below). This is more accurate than the mix model, and
-     cheaper.
-   - A mix: keep the default `--lang multi`. No need to name the languages.
-3. **What is it about, in a sentence or two?** Ask for the names of people,
-   places, brands, products and technical terms that come up. Turn the answer
-   into `--keyterms`: proper names and unusual words only, spelled as they
-   are said in the recording's language, about 20 to 50 at most, never common
-   words. Keyterms add about $0.08 per hour.
+### First, two questions to click
 
-If the answers describe a doctor visit, see `--medical` below.
+Ask both in one AskUserQuestion call, worded as below. Without that tool, ask
+them in one short message instead.
+
+The tool always adds an Other choice where the user can type; nothing else in
+it takes text. So never offer an option whose label promises the user will
+type or describe something. When typing is needed, the question itself says
+to pick Other.
+
+1. **"Who speaks in <file name>? If you know the names, pick Other and type
+   them."**
+   - "One speaker" (a voice note, a lecture): add `--no-diarize`.
+   - "Several, names unknown": speaker labels stay on, which is the default.
+   - Other, with names: speaker labels stay on. If the user gave the names in
+     the order people first speak, pass them as `--speakers`; otherwise see
+     `--speakers` below.
+2. **"Which language is the recording in? For another one, pick Other and
+   type it."**
+   - The language the user writes in, by name: add `--lang` with its code
+     (`en`, `de`, `es`, `fr`, ...; see Languages below). One language is more
+     accurate than the mix model, and cheaper.
+   - "A mix of languages": keep the default `--lang multi`. No need to name
+     them.
+   - Other, with a language: add `--lang` with its code.
+
+### Then, the context, as a typed message
+
+After the clicks, ask for the context in a normal chat message, not in
+AskUserQuestion, so the user gets a real text box. Push for it: keyterms help
+a lot with exactly the words that come out wrong without them, rare names
+above all. Deepgram reports up to 90% better recall of the words given. Ask
+roughly this:
+
+> What is it about, in a sentence or two? And which names come up: people who
+> are talked about, places, brands, products, technical terms, professions?
+> Rare names come out much better when I know them. No need for the speakers'
+> names. Say skip to go without.
+
+Wait for the answer before running. Turn it into `--keyterms`: proper names
+and unusual words only, spelled as they are said in the recording's language,
+about 20 to 50 at most, never common words. Keyterms add about $0.08 per hour.
+If the user says skip, run with no keyterms.
+
+### Medical context: decide it yourself
+
+Do not ask whether it is a doctor visit. If the context, the file name or the
+request points to healthcare (a doctor visit, test results, a procedure, a
+diagnosis), add `--medical` as described below and say so in one line. If it
+is unclear, ask. `--medical` adds its own medical word list on top of the
+user's keyterms, so the context still counts.
 
 ## The one command
 
