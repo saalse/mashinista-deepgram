@@ -104,6 +104,16 @@ You can answer them up front in the same message and skip the questions:
 If it sounds like a doctor visit, Claude switches to the medical model on its
 own and tells you. Say "just go" to skip the questions.
 
+## Calls: your voice apart from the others
+
+mashinista-deepgram can keep your own voice apart from everyone else's on a
+call. On a call between two people, that makes the speaker labels exact;
+with three or more people on the call, it makes them better. This works when
+the call was recorded as one stereo file with your microphone on the left
+channel and the sound your computer played (the other people) on the right.
+Nistka, a small Mac call recorder, records calls this way. See
+[transcribing calls recorded with Nistka](docs/nistka.md).
+
 ## How long a recording can be
 
 Any video that fits on your Mac is fine, because only the sound is sent,
@@ -149,6 +159,14 @@ uv run ~/.claude/skills/transcribe-deepgram/scripts/transcribe.py ~/Movies/lectu
 ```
 
 Add `--help` to see every option.
+
+## Development
+
+The tests use generated audio only:
+
+```bash
+uv run --no-project --with pytest==9.2.0 pytest tests
+```
 
 ## Where things are
 

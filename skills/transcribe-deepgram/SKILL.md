@@ -1,12 +1,12 @@
 ---
 name: transcribe-deepgram
-description: Transcribe a local audio or video file (mp4, mov, m4a, mp3, wav and more, up to several hours) to text with Deepgram nova-3, with speaker labels and timestamps, mixed languages supported, privacy mode (model-training opt-out) on by default. Use when the user asks to transcribe, make a transcript of, or turn into text a recording, lecture, interview, meeting, call, voice note or doctor visit, or to update mashinista-deepgram.
+description: Transcribe a local audio or video file (mp4, mov, m4a, mp3, wav and more, up to several hours) to text with Deepgram nova-3, with speaker labels and timestamps, mixed languages supported, privacy mode (model-training opt-out) on by default. Use when the user asks to transcribe, make a transcript of, or turn into text a recording, lecture, interview, meeting, call, voice note or doctor visit, or to update mashinista-deepgram. For call recordings with the user's mic on the left channel and the others on the right (Nistka saves them in ~/Documents/Nistka) it labels the user's own lines exactly, from their own channel.
 license: MIT
 compatibility: macOS, designed for Claude Code (the Code tab of the Claude desktop app). Needs uv, ffmpeg and internet access to api.deepgram.com, plus a Deepgram API key; install.sh sets all of this up.
 metadata:
   author: Alex Samson (https://www.saalse.com/)
   repository: https://github.com/saalse/mashinista-deepgram
-  version: "1.2"
+  version: "1.3"
 ---
 
 # Transcribe with Deepgram
@@ -49,11 +49,21 @@ the `.env` file the installer saved in
 `~/Library/Application Support/Mashinista/deepgram`. Never print, read aloud
 or ask for the key in the chat.
 
+## Call recordings
+
+A call recording is one stereo file: the user's mic on the left channel,
+everyone else on the right. Nistka records calls this way into
+`~/Documents/Nistka`. When the user asks for a file from that folder, for a call without a path ("my last call"), or to transcribe a
+stereo file "as a call", read [references/nistka.md](references/nistka.md)
+first and follow it: a call gets its own questions, a free check before the
+paid run, and its own output to explain.
+
 ## Before transcribing: three quick questions
 
 Before the first run on a file, ask about it, in the language the user writes
 in. Skip any question the request already answers, and skip them all if the
-user says to just go (then use the defaults).
+user says to just go (then use the defaults). A call gets other questions:
+see the section above.
 
 ### First, two questions to click
 
@@ -125,7 +135,9 @@ PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" uv run ~/.claude/skills/transcribe
   and uploads only that, so the picture never leaves the computer.
 - The run prints `Length: 1 h 52 min, about $0.58 at pay as you go prices`
   before it uploads. Pass the length and the price on to the user with the
-  result.
+  result. If the user asks what it will cost before paying, add `--check` to
+  the same command: it prints the settings, the length and the price, and
+  uploads nothing.
 
 Defaults: model nova-3, `--lang multi` (handles a mix of languages), speaker
 labels on, no keyterms.
@@ -136,7 +148,7 @@ labels on, no keyterms.
   the order people first speak. If the user names the speakers, run once
   without it, look at who speaks first in the transcript, then rerun with
   names only if they want them in the file. Otherwise just tell them which
-  speaker is who.
+  speaker is who. On a call it means something else.
 - `--keyterms "Word one,Word two"` helps with names, brands or jargon the
   user expects in the recording. If the first result still gets a name wrong,
   add it and run again.
