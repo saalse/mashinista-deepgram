@@ -197,4 +197,4 @@ Move `~/Library/Application Support/Mashinista` and
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Made by [Alex Samson](https://www.saalse.com/).
+MIT, see [LICENSE](LICENSE). Made by [Alex Samson](https://saalse.com).

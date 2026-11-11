@@ -4,7 +4,7 @@ description: Transcribe a local audio or video file (mp4, mov, m4a, mp3, wav and
 license: MIT
 compatibility: macOS, designed for Claude Code (the Code tab of the Claude desktop app). Needs uv, ffmpeg and internet access to api.deepgram.com, plus a Deepgram API key; install.sh sets all of this up.
 metadata:
-  author: Alex Samson (https://www.saalse.com/)
+  author: Alex Samson (https://saalse.com)
   repository: https://github.com/saalse/mashinista-deepgram
   version: "1.3"
 ---
