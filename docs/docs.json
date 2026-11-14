@@ -1,0 +1,23 @@
+{
+  "name": "mashinista-deepgram",
+  "colors": {
+    "primary": "#2563EB"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "mashinista-deepgram",
+        "pages": [
+          "index",
+          "nistka"
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/saalse/mashinista-deepgram"
+    }
+  }
+}

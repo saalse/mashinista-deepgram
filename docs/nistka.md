@@ -1,4 +1,7 @@
-# Transcribing calls recorded with Nistka
+---
+title: Transcribing calls recorded with Nistka
+sidebarTitle: Calls recorded with Nistka
+---
 
 Nistka is a small Mac menu bar recorder for calls. It saves each call as one
 stereo file: your microphone on the left channel, everyone else (the sound
