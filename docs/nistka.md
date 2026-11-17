@@ -36,6 +36,10 @@ price.
   audio changes mid-call (another device, a reconnect).
 - Anyone sitting next to you is heard by your mic, so they are labelled as
   you.
+- On speakers, your mic can still catch a moment of the others' voice.
+  Those words are taken out of your lines when they repeat the others'
+  words a fraction of a second later. Short words you both say at once,
+  like "yes", stay yours.
 - If nothing played through your computer (for example a phone on speaker
   in the room), the right channel is silent. Then only your mic channel is
   sent, with speakers told apart by voice, at the normal price.

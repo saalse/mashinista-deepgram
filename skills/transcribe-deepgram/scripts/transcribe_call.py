@@ -125,6 +125,14 @@ def repeat_text(repeated: int, me_lines: int, *, short: bool = False) -> str:
     return line + ": the channels stayed apart"
 
 
+def echo_text(words: int) -> str:
+    """The echo cleanup count, in plain words."""
+    if not words:
+        return "none of your words were an echo of the others'"
+    return (f"dropped {words} word{'s' if words != 1 else ''} on your channel "
+            "that were an echo of the others' (their voice from your speakers)")
+
+
 def resolve_diarize(flag: bool | None, *, call_mode: bool,
                     speaker_names: list[str]) -> bool:
     """Diarization on unless turned off; on a call, for the others only.
@@ -205,11 +213,14 @@ def build_call_transcript(data: dict, *, source: Path, language: str,
 
     source is what the header names: the recording, or the --output stem.
     """
-    from call_lines import call_lines, count_repeats, drop_noise_lines, label_lines
+    from call_lines import (call_lines, count_repeats, drop_echo_words,
+                            drop_noise_lines, label_lines)
 
     lines = call_lines(data, far_diarized=far_diarized)
+    dropped, echo = {}, 0
+    if not keep_all_lines:
+        lines, echo = drop_echo_words(lines)
     repeated, me_lines = count_repeats(lines)
-    dropped = {}
     if not keep_all_lines:
         lines, dropped = drop_noise_lines(lines)
     label_lines(lines, speaker_names)
@@ -240,6 +251,7 @@ def build_call_transcript(data: dict, *, source: Path, language: str,
         detail = ", ".join(f"{v} {k}" for k, v in sorted(dropped.items()))
         out.append(f"Cleanup:    dropped {sum(dropped.values())} short lines"
                    + (f" ({detail})" if detail else ""))
+        out.append(f"Echo:       {echo_text(echo)}")
     out.append(f"Repeats:    {repeat_text(repeated, me_lines, short=True)}")
     if metadata.get("duration") is not None:
         out.append(f"Length:     {fmt_ts(metadata['duration'])}")
@@ -270,6 +282,6 @@ def build_call_transcript(data: dict, *, source: Path, language: str,
     if metadata.get("request_id"):
         out.append(f"  Deepgram request_id {metadata['request_id']}")
 
-    counts = {"repeated": repeated, "me_lines": me_lines,
+    counts = {"repeated": repeated, "me_lines": me_lines, "echo": echo,
               "dropped": sum(dropped.values()), "dropped_detail": dropped}
     return "\n".join(out).rstrip() + "\n", counts

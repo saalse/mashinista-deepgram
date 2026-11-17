@@ -132,16 +132,25 @@ what that means for the labels and the price.
 - `Settings:` and `Length:` before the upload: check them (the labels in
   the settings are the ones the transcript will use), and pass the price on.
   It already counts both channels and the keyterms.
+- `Echo: dropped N words on your channel`: the user's mic heard the others
+  from the speakers, and those words are gone from the user's lines. A run
+  of three or more of the others' words, repeated on the user's channel a
+  fraction of a second later, counts as echo; so does one long word right
+  on that delay. Short words both people said at once ("yes", "hello")
+  stay. A few words now and then is normal on speakers: the echo canceller
+  misses the first moment the other side speaks.
 - After the run, `Repeats: ... the channels stayed apart` is the normal
   result, with 0 or a few repeats (short words both people said at the same
-  moment). `WARNING: ... lines of yours also appear on the others' channel`
-  means the others' voices reached the user's mic, for example from
-  speakers without echo cancellation: tell the user the labels may be off
-  in places, and offer `--no-call` (one mixed recording with speakers told
-  apart by voice).
+  moment). It counts what is left after the echo cleanup. `WARNING: ...
+  lines of yours also appear on the others' channel` means more of the
+  others' voices reached the user's mic than the cleanup could tell apart:
+  tell the user the labels may be off in places, and offer `--no-call` (one
+  mixed recording with speakers told apart by voice).
 - `Cleanup: dropped N short lines`: short lines that came out in an odd
   language or script (Deepgram's mix model does that to short "yes" and "mm"
-  sounds) and pure fillers. Add `--keep-all-lines` to keep them.
+  sounds) and pure fillers.
+- `--keep-all-lines` turns both cleanups off: echo words and short lines
+  all stay.
 - The channel levels sit at the very end of the transcript file, in a short
   block of technical details, so the user can ignore them.
 

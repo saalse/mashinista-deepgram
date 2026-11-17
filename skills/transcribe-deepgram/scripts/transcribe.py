@@ -52,9 +52,10 @@ import tempfile
 from pathlib import Path
 
 from transcribe_call import (CALL_CHANNELS, audio_channels, build_call_transcript,
-                             call_labels, channel_levels, encode_call_audio,
-                             in_nistka_folder, leaked, levels_text, repeat_text,
-                             resolve_diarize, silent_channels, with_names)
+                             call_labels, channel_levels, echo_text,
+                             encode_call_audio, in_nistka_folder, leaked,
+                             levels_text, repeat_text, resolve_diarize,
+                             silent_channels, with_names)
 from transcribe_helpers import (build_transcript_text, die, extract_audio,
                                 fmt_length, make_room, media_duration,
                                 response_to_json, settings_line, split_list)
@@ -208,8 +209,8 @@ def parse_args(argv=None):
                         "nothing, writes nothing, needs no key.")
     p.add_argument("--keep-all-lines", dest="keep_all_lines", action="store_true",
                    help="On a call: keep short lines in an unexpected language "
-                        "or script, and pure fillers, which are dropped by "
-                        "default.")
+                        "or script, pure fillers, and words on your channel "
+                        "that echo the others', which are dropped by default.")
     p.add_argument("--timeout", dest="timeout", type=int, default=1200,
                    help="Request timeout in seconds (default 1200 = 20 min).")
     return p.parse_args(argv)
@@ -310,9 +311,13 @@ def main(argv=None) -> int:
         punctuate=True,
         utterances=True,
         utt_split=0.8,
-        diarize=diarize,
         mip_opt_out=mip_opt_out,
     )
+    # diarize=true is deprecated and stays on Deepgram's v1 diarizer;
+    # diarize_model=latest takes the newest one. Sending both is rejected.
+    # SDK 5.3.4 has no diarize_model argument, so it goes in as an extra
+    # query parameter.
+    extra_query = {"diarize_model": "latest"} if diarize else {}
     if call_mode:
         opts["multichannel"] = True  # billed per channel: about 2x
     if keyterms:
@@ -371,7 +376,8 @@ def main(argv=None) -> int:
         try:
             response = client.listen.v1.media.transcribe_file(
                 request=audio_bytes,
-                request_options={"timeout_in_seconds": args.timeout, "max_retries": 2},
+                request_options={"timeout_in_seconds": args.timeout, "max_retries": 2,
+                                 "additional_query_parameters": extra_query},
                 **opts,
             )
         except ApiError as e:
@@ -411,6 +417,7 @@ def main(argv=None) -> int:
             detail = ", ".join(f"{v} {k}" for k, v in sorted(counts["dropped_detail"].items()))
             print(f"Cleanup: dropped {counts['dropped']} short lines"
                   + (f" ({detail})" if detail else ""), file=sys.stderr)
+            print(f"Echo: {echo_text(counts['echo'])}.", file=sys.stderr)
         rep_n, total = counts["repeated"], counts["me_lines"]
         line = repeat_text(rep_n, total)
         if leaked(rep_n, total):
