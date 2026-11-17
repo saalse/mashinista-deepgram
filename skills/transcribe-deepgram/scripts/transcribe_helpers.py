@@ -179,6 +179,44 @@ def speaker_label(index, names: list[str]) -> str:
 
 # --- Transcript rendering -------------------------------------------------
 
+def speaker_pieces(u) -> list[dict]:
+    """An utterance cut where the speaker of its words changes.
+
+    Deepgram ends an utterance only at a pause (utt_split), so a quick reply
+    lands in the same utterance as the line before it, and the utterance's
+    own speaker field then names one of the two for all of it. The speaker
+    on each word is right, so each run of one speaker's words is a piece.
+    An utterance without words keeps its own speaker and transcript.
+    """
+    text = (getattr(u, "transcript", "") or "").strip()
+    words = list(getattr(u, "words", None) or [])
+    runs: list[list] = []
+    for w in words:
+        if runs and getattr(runs[-1][0], "speaker", None) == getattr(w, "speaker", None):
+            runs[-1].append(w)
+        else:
+            runs.append([w])
+    if not runs:
+        spk = getattr(u, "speaker", None)
+        return [{"speaker": int(spk) if spk is not None else None,
+                 "start": getattr(u, "start", None), "end": getattr(u, "end", None),
+                 "text": text}] if text else []
+    pieces = []
+    for run in runs:
+        if len(runs) > 1 or not text:
+            piece_text = " ".join((getattr(w, "punctuated_word", None)
+                                   or getattr(w, "word", "") or "") for w in run).strip()
+        else:
+            piece_text = text
+        if not piece_text:
+            continue
+        spk = getattr(run[0], "speaker", None)
+        pieces.append({"speaker": int(spk) if spk is not None else None,
+                       "start": getattr(run[0], "start", None),
+                       "end": getattr(run[-1], "end", None), "text": piece_text})
+    return pieces
+
+
 def build_transcript_text(response, *, source: Path, language: str,
                           diarize: bool, keyterms: list[str],
                           mip_opt_out: bool, speaker_names: list[str],
@@ -214,20 +252,15 @@ def build_transcript_text(response, *, source: Path, language: str,
 
     if utterances:
         if diarize:
-            # Merge consecutive utterances by the same speaker into one block.
+            # Merge consecutive same-speaker pieces into one block.
             blocks: list[dict] = []
-            for u in utterances:
-                text = (getattr(u, "transcript", "") or "").strip()
-                if not text:
-                    continue
-                spk = getattr(u, "speaker", None)
-                spk = int(spk) if spk is not None else None
-                if blocks and blocks[-1]["speaker"] == spk:
-                    blocks[-1]["end"] = getattr(u, "end", blocks[-1]["end"])
-                    blocks[-1]["text"] += " " + text
+            for piece in (pc for u in utterances for pc in speaker_pieces(u)):
+                if blocks and blocks[-1]["speaker"] == piece["speaker"]:
+                    if piece["end"] is not None:
+                        blocks[-1]["end"] = piece["end"]
+                    blocks[-1]["text"] += " " + piece["text"]
                 else:
-                    blocks.append({"speaker": spk, "start": getattr(u, "start", None),
-                                   "end": getattr(u, "end", None), "text": text})
+                    blocks.append(piece)
             for b in blocks:
                 label = speaker_label(b["speaker"], speaker_names)
                 lines.append(f"{label}  [{fmt_ts(b['start'])}–{fmt_ts(b['end'])}]")
