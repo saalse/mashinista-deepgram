@@ -161,6 +161,91 @@ def test_repeats_across_channels_are_counted():
     assert cl.count_repeats(lines) == (1, 3)
 
 
+# --- Echo of the far side on your mic ---------------------------------------
+
+def echo_texts(*utterances):
+    lines = cl.call_lines(response(*utterances), far_diarized=False)
+    kept, n = cl.drop_echo_words(lines)
+    return [(l["channel"], l["text"]) for l in kept], n
+
+
+def test_an_echo_run_is_dropped_and_your_own_words_stay():
+    far = "the delivery window moves to friday afternoon"
+    got, n = echo_texts(
+        utt(0, 1.0, "Can you tell me about the plan?"),
+        utt(1, 5.0, far),
+        utt(0, 5.06, far),                    # your mic hears it 60 ms later
+        utt(0, 9.0, "Friday works for me."),
+    )
+    assert n == 7
+    assert got == [(0, "Can you tell me about the plan?"), (1, far),
+                   (0, "Friday works for me.")]
+
+
+def test_your_words_after_an_echo_in_the_same_line_stay():
+    far = utt(1, 5.0, "we ship the update next week")
+    mine = utt(0, 5.05, "we ship the update next week")
+    tail = utt(0, 8.0, "Sounds good to me.")
+    mine["words"] += tail["words"]
+    mine["transcript"] += " " + tail["transcript"]
+    got, n = echo_texts(far, mine)
+    assert n == 6 and got[-1] == (0, "Sounds good to me.")
+
+
+def test_a_lag_that_wanders_a_little_is_still_an_echo():
+    far = utt(1, 3.0, "please send the signed contract today")
+    mine = utt(0, 3.0, "please send the signed contract today")
+    for w, lag in zip(mine["words"], (0.25, 0.08, 0.02, 0.0, 0.1, 0.03)):
+        w["start"] += lag
+    got, n = echo_texts(far, mine)
+    assert n == 6 and got == [(1, "please send the signed contract today")]
+
+
+def test_one_misheard_word_inside_an_echo_goes_with_it():
+    far = utt(1, 2.0, "we will review the budget tomorrow")
+    mine = utt(0, 2.05, "we will review a budget tomorrow okay")
+    mine["words"][-1]["start"] += 1.0     # "okay": yours, after the echo
+    got, n = echo_texts(far, mine)
+    assert n == 6 and got[-1] == (0, "okay")
+
+
+def test_short_words_you_both_say_at_once_stay():
+    got, n = echo_texts(
+        utt(1, 1.0, "Hello?"), utt(0, 1.1, "Hello!"),
+        utt(1, 4.0, "Yes."), utt(0, 4.05, "Yes."),
+        utt(1, 7.0, "Thank you."), utt(0, 7.08, "Thank you."),
+        utt(1, 10.0, "No, no, no."), utt(0, 10.05, "No, no, no."),
+    )
+    assert n == 0 and len(got) == 8
+
+
+def test_repeating_what_they_said_is_not_an_echo():
+    far = "the meeting moves to thursday at noon"
+    got, n = echo_texts(
+        utt(1, 2.0, far),
+        utt(0, 5.5, far),                     # you repeat it back later
+        utt(0, 20.0, "the meeting moves to thursday"),  # and much later
+    )
+    assert n == 0 and len(got) == 3
+
+
+def test_words_that_start_before_theirs_are_not_an_echo():
+    far = "the delivery window moves to friday afternoon"
+    got, n = echo_texts(utt(1, 5.0, far), utt(0, 4.7, far))
+    assert n == 0 and len(got) == 2
+
+
+def test_a_long_word_alone_goes_only_right_on_the_echo_delay():
+    got, n = echo_texts(
+        utt(1, 1.0, "Interesting."), utt(0, 1.05, "Interesting."),
+        utt(1, 5.0, "Absolutely."), utt(0, 5.32, "Absolutely."),
+        utt(1, 9.0, "Friday."), utt(0, 9.05, "Friday."),
+    )
+    assert n == 1
+    assert (0, "Interesting.") not in got
+    assert (0, "Absolutely.") in got and (0, "Friday.") in got
+
+
 # --- Transcript and command line ------------------------------------------
 
 def test_call_transcript_header_and_order(tmp_path):
@@ -181,6 +266,24 @@ def test_call_transcript_header_and_order(tmp_path):
     assert "request_id test" in footer and "Length:     02:00" in header
     assert body.index("Me  [00:01") < body.index("Speaker 1  [00:04") < body.index("Me  [00:09")
     assert counts["repeated"] == 0
+    assert "Echo:       none of your words" in header and counts["echo"] == 0
+
+
+def test_call_transcript_drops_echo_unless_keep_all_lines(tmp_path):
+    far = "Thanks for joining today everyone."
+    data = response(utt(1, 4.0, far, language="en"),
+                    utt(0, 4.06, far, language="en"),
+                    utt(0, 9.0, LONG_EN, language="en"))
+    kwargs = dict(source=tmp_path / "call.m4a", language="en", far_diarized=False,
+                  keyterms=[], mip_opt_out=True, speaker_names=[], model="nova-3")
+    text, counts = transcribe_call.build_call_transcript(
+        data, keep_all_lines=False, **kwargs)
+    header, body, _ = text.split("-" * 60)
+    assert counts["echo"] == 5 and "Echo:       dropped 5 words" in header
+    assert body.count("Thanks for joining") == 1
+    text, counts = transcribe_call.build_call_transcript(
+        data, keep_all_lines=True, **kwargs)
+    assert counts["echo"] == 0 and text.count("Thanks for joining") == 2
 
 
 def test_price_counts_each_channel():

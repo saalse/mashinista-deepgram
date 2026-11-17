@@ -1,9 +1,10 @@
 """
 call_lines.py: the transcript side of a two-channel call.
 
-After Deepgram: one line per utterance from both channels, labels for Me and
-the far side, short noise lines dropped, and lines of yours that also appear
-on the far channel counted.
+After Deepgram: one line per utterance from both channels, words of yours
+that are an echo of the far side dropped, labels for Me and the far side,
+short noise lines dropped, and lines of yours that also appear on the far
+channel counted.
 """
 from __future__ import annotations
 
@@ -19,6 +20,18 @@ MAIN_SCRIPT_SHARE = 0.02    # a script writing this share of a channel's words
 RARE_LETTERS = 2.0          # a letter this rare per 10,000 on a channel is foreign
 RARE_LETTERS_MIN = 3        # ... or seen at most this many times
 REPEAT_WINDOW_S = 1.0
+
+# Echo: the far side played through the speakers and picked up by your mic.
+# Your copy of a word starts a little after theirs: about 56 ms from speaker
+# to mic on a MacBook, plus Deepgram's own timing jitter.
+ECHO_LAG = 0.06       # s, the usual delay
+ECHO_LAG_MIN = -0.10  # s, your word's start minus theirs
+ECHO_LAG_MAX = 0.35
+ECHO_LAG_STEP = 0.25  # s, how much the lag may change from word to word
+ECHO_WORD_GAP = 1.0   # s, at most this between two of your words in a run
+ECHO_RUN_MIN = 3      # matched words in a row, at least two different ones
+ECHO_LONE_LETTERS = 8 # a word this long may go alone ...
+ECHO_LONE_LAG = (0.0, 0.20)  # ... when its lag is this tight
 
 # What Deepgram writes for hums and backchannels.
 FILLERS = {"mhm", "mhmm", "mm", "mmm", "hmm", "hm", "uh", "um", "umm",
@@ -78,6 +91,109 @@ def call_lines(data: dict, *, far_diarized: bool) -> list[dict]:
             })
     lines.sort(key=lambda l: (l["start"] or 0, l["channel"]))
     return lines
+
+
+def _echo_runs(mine: list[dict], theirs: list[dict]) -> list[list[int]]:
+    """Runs of your words that follow the far side's words, as indexes.
+
+    mine and theirs are word dicts sorted by start. A run is a stretch of
+    your words where each matches a far word with the same text, starting
+    ECHO_LAG_MIN to ECHO_LAG_MAX after it. The far words follow each other
+    (one far word may be missing from the echo), your words are at most
+    ECHO_WORD_GAP apart, and the lag changes by at most ECHO_LAG_STEP. One
+    unmatched word of yours inside a run (Deepgram heard the echo
+    differently) does not break it. Returns the runs that qualify as echo,
+    each with its matched words and any unmatched word between two of them.
+    """
+    starts: dict[str, list[tuple[float, int]]] = {}
+    for j, w in enumerate(theirs):
+        k = _norm(w.get("word") or "")
+        if k:
+            starts.setdefault(k, []).append((float(w["start"]), j))
+
+    def candidates(i: int) -> list[tuple[int, float]]:
+        k = _norm(mine[i].get("word") or "")
+        t = float(mine[i]["start"])
+        return [(j, t - s) for s, j in starts.get(k, ())
+                if ECHO_LAG_MIN <= t - s <= ECHO_LAG_MAX]
+
+    runs: list[list[tuple[int, float | None]]] = []  # (your index, lag); None: gap
+    run: list[tuple[int, float | None]] = []
+    last_j, last_lag, last_t, gap = -1, 0.0, 0.0, None
+
+    def close():
+        if run:
+            runs.append(run[:])
+        run.clear()
+
+    for i in range(len(mine)):
+        cands = candidates(i)
+        t = float(mine[i]["start"])
+        if run and t - last_t <= ECHO_WORD_GAP:
+            nxt = [(j, lag) for j, lag in cands
+                   if 0 < j - last_j <= 2 and abs(lag - last_lag) <= ECHO_LAG_STEP]
+            if nxt:
+                j, lag = min(nxt)
+                if gap is not None:
+                    run.append((gap, None))
+                    gap = None
+                run.append((i, lag))
+                last_j, last_lag, last_t = j, lag, t
+                continue
+            if gap is None and not cands:
+                gap, last_t = i, t
+                continue
+        close()
+        gap = None
+        if cands:
+            j, lag = min(cands, key=lambda c: abs(c[1] - ECHO_LAG))
+            run.append((i, lag))
+            last_j, last_lag, last_t = j, lag, t
+    close()
+
+    out = []
+    for r in runs:
+        matched = [(i, lag) for i, lag in r if lag is not None]
+        texts = {_norm(mine[i].get("word") or "") for i, _ in matched}
+        long_tight = any(len(_norm(mine[i].get("word") or "")) >= ECHO_LONE_LETTERS
+                         and ECHO_LONE_LAG[0] <= lag <= ECHO_LONE_LAG[1]
+                         for i, lag in matched)
+        if (len(matched) >= ECHO_RUN_MIN and len(texts) >= 2) or long_tight:
+            out.append([i for i, _ in r])
+    return out
+
+
+def drop_echo_words(lines: list[dict]) -> tuple[list[dict], int]:
+    """Drop words on your channel that are an echo of the far side.
+
+    When the far side plays through speakers, your mic hears it a moment
+    later, and Deepgram writes the same words on your channel too. Your own
+    words often match theirs as well ("yes", "okay", a name you both say),
+    so a short common word never goes on a single match: it takes a run of
+    ECHO_RUN_MIN matched words in a row, or one long word right on the echo
+    delay. Lines left with no words go. Returns the kept lines and how many
+    of your words were dropped.
+    """
+    mine = sorted((w for l in lines if l["channel"] == 0 for w in l["words"]),
+                  key=lambda w: float(w["start"]))
+    theirs = sorted((w for l in lines if l["channel"] == 1 for w in l["words"]),
+                    key=lambda w: float(w["start"]))
+    echo = {id(mine[i]) for run in _echo_runs(mine, theirs) for i in run}
+    if not echo:
+        return lines, 0
+    kept = []
+    for line in lines:
+        if line["channel"] != 0 or not any(id(w) in echo for w in line["words"]):
+            kept.append(line)
+            continue
+        words = [w for w in line["words"] if id(w) not in echo]
+        if not words:
+            continue
+        kept.append({**line, "words": words, "start": words[0]["start"],
+                     "end": words[-1]["end"],
+                     "text": " ".join(w.get("punctuated_word") or w.get("word") or ""
+                                      for w in words).strip()})
+    return kept, len(echo)
 
 
 def label_lines(lines: list[dict], names: list[str], *, me_label: str = "Me") -> None:
