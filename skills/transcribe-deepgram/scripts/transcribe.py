@@ -311,9 +311,13 @@ def main(argv=None) -> int:
         punctuate=True,
         utterances=True,
         utt_split=0.8,
-        diarize=diarize,
         mip_opt_out=mip_opt_out,
     )
+    # diarize=true is deprecated and stays on Deepgram's v1 diarizer;
+    # diarize_model=latest takes the newest one. Sending both is rejected.
+    # SDK 5.3.4 has no diarize_model argument, so it goes in as an extra
+    # query parameter.
+    extra_query = {"diarize_model": "latest"} if diarize else {}
     if call_mode:
         opts["multichannel"] = True  # billed per channel: about 2x
     if keyterms:
@@ -372,7 +376,8 @@ def main(argv=None) -> int:
         try:
             response = client.listen.v1.media.transcribe_file(
                 request=audio_bytes,
-                request_options={"timeout_in_seconds": args.timeout, "max_retries": 2},
+                request_options={"timeout_in_seconds": args.timeout, "max_retries": 2,
+                                 "additional_query_parameters": extra_query},
                 **opts,
             )
         except ApiError as e:

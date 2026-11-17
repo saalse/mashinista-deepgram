@@ -322,7 +322,8 @@ class FakeDeepgram:
             media=types.SimpleNamespace(transcribe_file=self.transcribe_file)))
 
     def transcribe_file(self, *, request, request_options, **opts):
-        FakeDeepgram.calls.append((request, opts))
+        query = {**opts, **request_options.get("additional_query_parameters", {})}
+        FakeDeepgram.calls.append((request, query))
         data = response(utt(0, 1.0, LONG_EN, language="en"),
                         utt(1, 6.0, "Thanks, that works for me.", speaker=0,
                             language="en"))
@@ -379,7 +380,8 @@ def test_a_nistka_call_goes_up_as_it_is_on_two_channels(
     (audio, opts), = fake_deepgram.calls
     assert audio == rec.read_bytes()  # no re-encode, no downmix
     assert opts["multichannel"] is True
-    assert opts["diarize"] is far_diarize
+    assert "diarize" not in opts
+    assert opts.get("diarize_model") == ("latest" if far_diarize else None)
     assert opts["mip_opt_out"] is True
     names = ([me] if me else []) + (speakers.split(",") if speakers else [])
     assert opts.get("keyterm", []) == names
@@ -421,7 +423,7 @@ def test_a_stereo_file_elsewhere_is_ordinary_unless_call(tmp_path, nistka,
     assert transcribe.main([str(rec)]) == 0
     assert transcribe.main([str(rec), "--call"]) == 0
     (_, plain), (_, call) = fake_deepgram.calls
-    assert "multichannel" not in plain and plain["diarize"] is True
+    assert "multichannel" not in plain and plain["diarize_model"] == "latest"
     assert call["multichannel"] is True
 
 
@@ -430,7 +432,7 @@ def test_no_call_turns_it_off_in_the_nistka_folder(nistka, fake_deepgram):
     rec = a_call(nistka)
     assert transcribe.main([str(rec), "--no-call"]) == 0
     (_, opts), = fake_deepgram.calls
-    assert "multichannel" not in opts and opts["diarize"] is True
+    assert "multichannel" not in opts and opts["diarize_model"] == "latest"
 
 
 @needs_ffmpeg
@@ -453,7 +455,7 @@ def test_one_silent_channel_sends_the_other_alone(nistka, fake_deepgram, tmp_pat
     rec = a_call(nistka, left=left, right=right)
     assert transcribe.main([str(rec), "--speakers", "Dana"]) == 0
     (audio, opts), = fake_deepgram.calls
-    assert "multichannel" not in opts and opts["diarize"] is True
+    assert "multichannel" not in opts and opts["diarize_model"] == "latest"
     assert opts["keyterm"] == ["Dana"]
     assert audio[:4] == b"OggS" and sent_channels(audio, tmp_path) == 1
     sent = tmp_path / "sent.ogg"
