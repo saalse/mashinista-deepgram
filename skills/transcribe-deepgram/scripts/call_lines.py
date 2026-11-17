@@ -25,7 +25,7 @@ REPEAT_WINDOW_S = 1.0
 # Your copy of a word starts a little after theirs: about 56 ms from speaker
 # to mic on a MacBook, plus Deepgram's own timing jitter.
 ECHO_LAG = 0.06       # s, the usual delay
-ECHO_LAG_MIN = -0.10  # s, your word's start minus theirs
+ECHO_LAG_MIN = -0.15  # s, your word's start minus theirs (timing jitter)
 ECHO_LAG_MAX = 0.35
 ECHO_LAG_STEP = 0.25  # s, how much the lag may change from word to word
 ECHO_WORD_GAP = 1.0   # s, at most this between two of your words in a run
